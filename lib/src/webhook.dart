@@ -4,13 +4,20 @@ import 'package:crypto/crypto.dart';
 import 'errors.dart';
 import 'models.dart';
 
-bool verifyWebhookSignature(dynamic payload, String? signature, String ipnSecret) {
-  if (signature == null || signature.trim().isEmpty || ipnSecret.trim().isEmpty) {
+/// Verifies the HMAC-SHA256 signature sent with incoming K Khay IPN webhooks.
+///
+/// Returns `true` if the signature is authentic and untampered.
+bool verifyWebhookSignature(
+  dynamic payload,
+  String? signature,
+  String webhookSecret,
+) {
+  if (signature == null || signature.trim().isEmpty || webhookSecret.trim().isEmpty) {
     return false;
   }
 
   final rawBody = payload is String ? payload : jsonEncode(payload);
-  final key = utf8.encode(ipnSecret.trim());
+  final key = utf8.encode(webhookSecret.trim());
   final bytes = utf8.encode(rawBody);
 
   final hmacSha256 = Hmac(sha256, key);
@@ -20,15 +27,28 @@ bool verifyWebhookSignature(dynamic payload, String? signature, String ipnSecret
   return _constantTimeCompare(expectedHex, signature.trim().toLowerCase());
 }
 
-WebhookEvent parseWebhookEvent(String rawBody, String? signature, String ipnSecret) {
-  if (!verifyWebhookSignature(rawBody, signature, ipnSecret)) {
-    throw SignatureVerificationException('Invalid K Khay webhook signature: Request rejected.');
+/// Validates and parses an incoming K Khay IPN webhook request.
+/// Throws [SignatureVerificationException] if the signature does not match.
+KkhayWebhookEvent parseWebhookEvent(
+  String rawBody,
+  String? signature,
+  String webhookSecret,
+) {
+  if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+    throw SignatureVerificationException(
+      'Invalid or untrusted K Khay webhook signature (x-kkhay-signature mismatch).',
+    );
   }
 
-  final decoded = jsonDecode(rawBody) as Map<String, dynamic>;
-  return WebhookEvent.fromJson(decoded);
+  try {
+    final decoded = jsonDecode(rawBody) as Map<String, dynamic>;
+    return KkhayWebhookEvent.fromJson(decoded);
+  } catch (err) {
+    throw FormatException('Failed to parse K Khay webhook body as JSON: $err');
+  }
 }
 
+/// Constant-time string comparison to prevent cryptographic timing attacks.
 bool _constantTimeCompare(String a, String b) {
   if (a.length != b.length) return false;
   int result = 0;
@@ -37,4 +57,3 @@ bool _constantTimeCompare(String a, String b) {
   }
   return result == 0;
 }
-
