@@ -3,12 +3,17 @@ name: Publish to pub.dev
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,4 +26,3 @@ jobs:
 
       - name: Publish to pub.dev
         run: dart pub publish --force
-
